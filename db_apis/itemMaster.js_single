@@ -1,0 +1,52 @@
+const database = require('../services/database');
+const logger = require('../logger/logger');
+
+/*const query =`SELECT ITEM_MASTER.ITEM "itemName",
+72 "BusinessUnit",
+(SELECT DISTINCT LOCAL_ITEM_DESC FROM ITEM_LOC WHERE ITEM in('103106') and loc=1) "Description",
+ITEM_MASTER.ITEM_DESC_SECONDARY "LongDescription",
+ITEM_MASTER.ITEM "ItemBarCode",
+(Select SUBSTR(uv.uda_value_desc, 1, 25) buyer
+From uda_item_lov uil, uda_values uv
+WHERE uil.uda_id = uv.uda_id and uil.uda_value = uv.uda_value
+AND uil.uda_id = 11
+AND uil.item = '103106') "ReferenceField1",
+(SELECT NVL((SELECT 1 FROM DAILY_PURGE WHERE KEY_VALUE in('103106') ),0) AS MarkForDeletion FROM DUAL)  "MarkForDeletion"
+FROM ITEM_MASTER  WHERE ITEM_MASTER.ITEM in('103106')`;*/
+
+
+async function getItems(items) {
+  try {
+    logger.info('calling getItems db apis');
+	  console.log('query input', items);
+	  const query = `SELECT ITEM_MASTER.ITEM "itemName",
+		                                       	72 "BusinessUnit",
+		                                        (SELECT DISTINCT SUBSTR(LOCAL_ITEM_DESC, 1, 40) FROM ITEM_LOC WHERE ITEM in(${items}) and loc=1) "Description",
+		                                        SUBSTR(ITEM_MASTER.ITEM_DESC_SECONDARY, 1,40) "LongDescription",
+		                                        ITEM_MASTER.ITEM "ItemBarCode",
+		                                        (Select SUBSTR(uv.uda_value_desc, 1, 25) buyer
+								                                              From uda_item_lov uil, uda_values uv
+								                                              WHERE uil.uda_id = uv.uda_id and uil.uda_value = uv.uda_value
+								                                              AND uil.uda_id = 11
+								                                              AND uil.item IN (${items})
+								                                      ) "ReferenceField1",
+		                                        (SELECT NVL((SELECT 1 FROM DAILY_PURGE WHERE KEY_VALUE in(${items}) ),0) AS MarkForDeletion FROM DUAL)  "MarkForDeletion"
+	                                FROM ITEM_MASTER  WHERE ITEM_MASTER.ITEM = ${items}`;
+	  console.log('query to execute',query);
+    const result = await database.getQuery(query);
+     if(result !=undefined){
+      //logger.info('Result', result);
+    return result.rows;
+  }else{
+    logger.info('No data returned from db');
+    return "";
+  } 
+  //return result.rows;
+  }
+  catch (err) {
+    logger.error('Exception occured in getItems dbapi', err);
+    throw err;
+  }
+}
+
+module.exports.getItems = getItems;

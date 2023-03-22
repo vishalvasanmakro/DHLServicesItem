@@ -1,0 +1,136 @@
+const itemMasterDB = require('../db_apis/itemMaster');
+const itmFacltyCtrl = require('../controller/itemFacility');
+const itmPackCtrl = require('../controller/itemPackage');
+const itmSuppXrefCtrl = require('../controller/itemSupplierXref');
+const itmWmosCtrl = require('../controller/itemWmos');
+const closeServer = require('../index');
+const logger = require('../logger/logger');
+const fetch = require('node-fetch');
+const base64= require('base-64');
+const fsPromises = require('fs').promises;
+const axios = require('axios');
+
+async function get(req, response) {
+	try {
+		logger.info('ItemMaster get called');
+		
+		const items= req.query.items;
+	        let statusCode = req.query.status;
+	        if(statusCode === undefined){
+	              statusCode = 'Create';
+	         }
+	        console.log('Params',items,'status',statusCode);
+
+		const data = await getData(items);
+		//console.log('result:',result);
+		const header = {
+			"StatusCode": statusCode,
+			"Batch_ID": "",
+			"Batch_Size": "",
+			"Reference_ID": "AAAAAABBBBB000001"
+		}
+		const result = {
+			Header: header,
+			data: data
+		}
+		console.log('Data to DHL',result);
+		
+//		response.json(result);
+//		console.log('!!!!!!!!!!!!!!');
+		//
+	await fsPromises.writeFile('/home/admin/itemResult.txt', JSON.stringify(result));
+
+let postData = JSON.stringify(result);
+		        console.log(postData);
+		axios.defaults.headers.post['Content-Type'] = 'application/json';
+		      var session_url = 'http://10.81.224.134:5555/invoke/RouterOperations/receiveJSONDocument?originId=Host&origCompany=Makro&originFormat=JSON&msgType=facility&jsonFormat=stream';
+		              var uname = 'Makro';
+		              var pass = 'Makro@2021';
+		 axios.post(session_url, postData,{
+			                                auth: {
+		                                          username: uname,
+			                                  password: pass
+			                                  }}).then(res => {
+	                             console.log(`statusCode: ${res.status}`);
+	                             console.log(res);
+	                             console.log(res.config.data);
+		                     response.send(res.data);
+		                    }).catch(function(error) {
+		                    console.log(error);
+                                     console.log('Error on Authentication');
+                           });
+	}
+		catch (err) {
+					logger.error('Exception in itemMaster controller', err);
+					await closeServer.serverShutdown(err);
+				}
+
+}
+
+
+async function getData(items) {
+	try {
+		const itemResult = await itemMasterDB.getItems(items);
+		
+
+		let data = [];
+		if (itemResult != "") {
+			for (key in itemResult) {
+				let { itemName, BusinessUnit, Description, LongDescription, UnitWeight, UnitVolume, UnitHeight, UnitWidth, UnitLength, SoldOnline, SoldInStores, AvailableForPickupInStore, AvailableForShipToStore, ItemImageFilename, ItemURLPath, ItemBarCode, ReferenceField1, ReferenceField2, ReferenceField6, ReferenceField7, ReferenceField8, ReferenceField9, ReferenceField10, MarkForDeletion } = itemResult[key];
+				let item = itemResult[key].itemName;
+				const itemXrefResult = await itmSuppXrefCtrl.getItemXrefData(item);
+				const itemFacility = await itmFacltyCtrl.getItemFacilityData(item);
+				//console.log('itemFacility-->',!itemFacility.length)
+				let supplierField="";
+				if(!itemFacility.length){
+					supplierField =""
+				}else
+				{supplierField = itemFacility[key].MiscAlpha2 == null ? "" : itemFacility[key].MiscAlpha2;}
+				const itemPackage = await itmPackCtrl.getItemPackageData(item,supplierField);
+				const itemWmosResult = await itmWmosCtrl.getItemWmosData(item);
+				data.push({
+					"itemName": itemName == null ? "" : itemName.toString(),
+					"BusinessUnit": BusinessUnit == null ? "" : BusinessUnit.toString(),
+					"Description": Description == null ? "" : Description.toString(),
+					"LongDescription": LongDescription == null ? "" : LongDescription.toString(),
+					"UnitWeight": UnitWeight == null ? "1" : UnitWeight.toString(),
+					"UnitVolume": UnitVolume == null ? "1" : UnitVolume.toString(),
+					"UnitHeight": UnitHeight == null ? "1" : UnitHeight.toString(),
+					"UnitWidth": UnitWidth == null ? "1" : UnitWidth.toString(),
+					"UnitLength": UnitLength == null ? "1" : UnitLength.toString(),
+					"SoldOnline": SoldOnline == null ? "" : SoldOnline.toString(),
+					"SoldInStores": SoldInStores == null ? "" : itemResutl.SoldInStore.toString(),
+					"AvailableForPickupInStore": AvailableForPickupInStore == null ? "" : AvailableForPickupInStore.toString(),
+					"AvailableForShipToStore": AvailableForShipToStore == null ? "" : AvailableForShipToStore.toString(),
+					"ItemImageFilename": ItemImageFilename == null ? "" : ItemImageFilename.toString(),
+					"ItemURLPath": ItemURLPath == null ? "" : ItemURLPath.toString(),
+					"ItemBarCode": ItemBarCode == null ? "" : ItemBarCode.toString(),
+					"ReferenceField1": ReferenceField1 == null ? "" : ReferenceField1.toString(),
+					"ReferenceField2": ReferenceField2 == null ? "" : ReferenceField2.toString(),
+					"ReferenceField6": ReferenceField6 == null ? "" : ReferenceField6.toString(),
+					"ReferenceField7": ReferenceField7 == null ? "" : ReferenceField7.toString(),
+					"ReferenceField8": ReferenceField8 == null ? "" : ReferenceField8.toString(),
+					"ReferenceField9": ReferenceField9 == null ? "" : ReferenceField9.toString(),
+					"ReferenceField10": ReferenceField10 == null ? "" : ReferenceField10.toString(),
+					"MarkForDeletion": MarkForDeletion == null ? "" : MarkForDeletion.toString(),
+					"ItemSupplierXref": itemXrefResult,
+					"ItemFacilityWMS": itemFacility,
+					"ItemPackage": itemPackage,
+					"ItemWmos": itemWmosResult
+				})
+			}
+			//logger.info('data-->',data);
+			return data;
+		}
+		else {
+			return "";
+		}
+	}
+	catch (err) {
+		logger.error('Exception in getData');
+		throw err;
+	}
+}
+
+module.exports = { get };
+
